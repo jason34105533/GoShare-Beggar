@@ -4,6 +4,7 @@ import smtplib
 from email.mime.text import MIMEText
 import json
 import os
+import datetime
 
 # Curl Usage
 HOST_LINK = "https://www.ptt.cc/bbs"
@@ -19,16 +20,19 @@ SECURTIYCODE = os.environ.get("SECURTIYCODE")
 # Options
 DO_SEARCH = True
 DO_ATTACH = True
+DO_MAIL = True
 
 SEARCH_PAGE = (HOST_LINK + "/" + SECTION + "/search?q=" + QUEST) if (DO_SEARCH == True) else (HOST_LINK + "/" + SECTION + "/index.html")
 
 # Function Implementation
-def Retreive_Text(link: str) -> str:
+def Retreive_TextAndTimestamp(link: str) -> str:
     response = requests.get(link)
 
     if(response.status_code == requests.codes.ok):
         soup = BeautifulSoup(response.text, 'html.parser')
         
+    Timestamp =  soup.find_all("span", class_="article-meta-value")[3].text.strip() # Suppose in this format : "Fri Aug 22 10:27:20 2025"
+    
     soup = soup.find("div", class_="bbs-screen bbs-content")
 
     for meta in soup.find_all("div", class_=["article-metaline", "article-metaline-right", "push"]):
@@ -37,7 +41,8 @@ def Retreive_Text(link: str) -> str:
     for meta in soup.find_all("span"):
         meta.decompose()
         
-    return soup.text.strip()
+    return soup.text.strip(), Timestamp
+ 
  
 # BS4 is used for parsing HTML and XML documents
 def Curl_LinkAndTitle(SEARCH_PAGE :str) -> tuple :
@@ -63,11 +68,11 @@ def Curl_LinkAndTitle(SEARCH_PAGE :str) -> tuple :
                 
     return article_title, article_link
 
-def Mail_It(Title: str ,Content: str) -> set :
-    
-    Content = (Content + "\n\n" + ATTACH_LINK)if DO_ATTACH else Content
 
-    # xnhe dhkt ysia srne
+def Mail_It(Title: str ,Content: str, Timestamp: str) -> set :
+    
+    Content = (Timestamp + "\n\n" + Content + "\n" + ATTACH_LINK)if DO_ATTACH else (Timestamp + "\n\n" + Content)
+
     msg = MIMEText(Content, 'plain', 'utf-8') # 郵件內文
     # msg['Subject'] = '快搶！ 有新的GoShare優惠卷！'            # 郵件標題
     msg['Subject'] = Title            # 郵件標題
@@ -88,18 +93,27 @@ def Mail_It(Title: str ,Content: str) -> set :
     smtp.quit()
 
 
-def Check_NewPost(Titles :list, Links: list, Link_Set: set) :
+def Check_NewPost(Titles :list, Links: list, Link_Set: set, Mail : bool) :
     for (title, link) in zip(Titles, Links):
-        if(link not in Link_Set):
-            tmp_Content = Retreive_Text(link)
-            Mail_It(title, tmp_Content)
+        if((link not in Link_Set) and (link != "Article Have been removed")) :
+            if Mail:
+                tmp_Content, tmp_Timestamp = Retreive_TextAndTimestamp(link)
+                Mail_It(title, tmp_Content, tmp_Timestamp)
             Link_Set.add(link)
     
     return Link_Set
 
+def Load_Data():
+    jsonFile = open(".store/history.json", "r")
+    data = json.load(jsonFile)
+    jsonFile.close()
+    
+    return {i["Link"] for i in data["data"]}
+
+
 def Flush_Back(Titles :list, Links: list) :
     Dic = dict()
-    Dic["updated_at"] = "2025-08-22"
+    Dic["updated_at"] = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
     
     Data = []
     for (title, link) in zip(Titles, Links):
@@ -109,32 +123,21 @@ def Flush_Back(Titles :list, Links: list) :
     
     jsonFile = open('./.store/history.json','w', encoding="utf-8")
     json.dump(Dic, jsonFile, indent=4, ensure_ascii=False)
+    jsonFile.close()
     
     
 def INIT():
     if(os.path.exists(".store") == False):
         directory_name = ".store"
         os.mkdir(directory_name)
-    
-    
         
 
 if __name__ == "__main__":
 
     INIT()
+    Link_Set = Load_Data()
     
     Titles, Links = Curl_LinkAndTitle(SEARCH_PAGE)
-
-    Content_of_1 = Retreive_Text(Links[0])
-    Title_of_1 = Titles[0]
-
-    # print([Title_of_1, Content_of_1])
-
-    Link_Set = set({'https://www.ptt.cc/bbs/Lifeismoney/M.1754649135.A.018.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1750074707.A.EC4.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752833242.A.509.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752030784.A.B2F.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751022759.A.72F.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1753438483.A.1D1.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752240299.A.6E5.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1754039089.A.D23.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752980809.A.486.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752624603.A.4B9.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751900624.A.530.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751627929.A.43B.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1755252333.A.475.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752390321.A.DAE.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1754205551.A.400.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751548003.A.5FF.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751282995.A.DDC.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1751469142.A.B51.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1752834550.A.AC6.html', 'https://www.ptt.cc/bbs/Lifeismoney/M.1750414475.A.E9C.html'})
-    Link_Set = Check_NewPost(Titles, Links, Link_Set)
-
-    print(Link_Set)
-
-    # Mail_It(Title_of_1, Content_of_1)
+    Link_Set = Check_NewPost(Titles, Links, Link_Set, DO_MAIL)
 
     Flush_Back(Titles, Links)
